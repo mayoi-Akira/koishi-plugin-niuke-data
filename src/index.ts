@@ -1,5 +1,5 @@
 // import { get } from "http";
-import { Context, Schema, h, segment } from "koishi";
+import { Context, Schema, h } from "koishi";
 import puppeteer from "puppeteer";
 export const name = "niuke-data";
 
@@ -426,22 +426,35 @@ export function apply(ctx: Context) {
     });
   });
 
-  ctx.command("牛客比赛").action(async ({ session }) => {
+  ctx.command("牛客比赛 [arg1]").action(async ({ session }, num) => {
     getContestList().then(async (contests) => {
       if (contests.length === 0) {
         session.send("获取比赛失败");
         return;
       }
-      let message = `共 ${contests.length} 个即将开始的比赛：\n\n\n`;
-
-      for (let i = 0; i < contests.length; i++) {
+      let message = ``;
+      let len = 0;
+      if (num === "0" || num === undefined || num === "") {
+        message = `共 ${contests.length} 个即将开始的比赛：\n\n`;
+        len = contests.length;
+      } else if (num && !isNaN(Number(num))) {
+        len = Number(num);
+        if (len > contests.length) {
+          len = contests.length;
+        }
+        message = `共 ${contests.length} 个即将开始的比赛，前 ${len} 场：\n\n`;
+      } else {
+        session.send("请输入正确的数字");
+        return;
+      }
+      for (let i = 0; i < len; i++) {
         const contest = contests[i];
 
-        const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
-          contest.logo
-        )}&w=50&h=50&fit=cover`;
-        message += `${i + 1}.\n`;
-        message += segment.image(proxyUrl) + "\n";
+        // const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
+        //   contest.logo
+        // )}&w=50&h=50&fit=cover`;
+        message += `(${i + 1})\n`;
+        // message += segment.image(proxyUrl) + "\n";
 
         message += `${contest.name}\n`;
 
@@ -449,7 +462,7 @@ export function apply(ctx: Context) {
         if (contest.countdown) {
           message += `距离开赛：${contest.countdown}\n`;
         }
-        message += `比赛链接：https://ac.nowcoder.com/acm/contest/${contest.id}\n\n\n`;
+        message += `比赛链接：https://ac.nowcoder.com/acm/contest/${contest.id}\n\n`;
       }
       session.send(message);
     });

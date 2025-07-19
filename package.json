@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-niuke-data",
   "description": "获取牛客竞赛站的一些数据",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -13,6 +13,11 @@
     "url": "git + https://github.com/mayoi-Akira/koishi-plugin-niuke-data.git"
   },
   "license": "MIT",
+  "homepage": "https://github.com/mayoi-Akira/koishi-plugin-niuke-data",
+  "author": {
+    "name": "mayoi-Akira",
+    "email": "akane36@163.com"
+  },
   "keywords": [
     "chatbot",
     "koishi",
