@@ -1,21 +1,11 @@
-import { Context, Schema, h } from "koishi";
+// import { get } from "http";
+import { Context, Schema, h, segment } from "koishi";
 import puppeteer from "puppeteer";
-
 export const name = "niuke-data";
 
 export interface Config {}
 
 export const Config: Schema<Config> = Schema.object({});
-
-interface SearchPayload {
-  page: number;
-  pageSize: number;
-  query: string;
-  type: "user";
-  searchType: string;
-  subType: number;
-  uiType: number;
-}
 
 async function getUserInfo(username: string) {
   const ts = Date.now();
@@ -24,7 +14,7 @@ async function getUserInfo(username: string) {
     "?_="
   );
 
-  const payload: SearchPayload = {
+  const payload = {
     page: 1,
     pageSize: 20,
     query: username,
@@ -56,7 +46,8 @@ async function getUserInfo(username: string) {
   const json = await res.json();
   // console.log(json);
   // console.log(json.data?.records);
-  const totalPage = json?.data?.totalPage >= 5 ? 5 : json?.data?.totalPage || 0;
+
+  const totalPage = Math.min(5, json?.data?.totalPage) || 0;
 
   const users: any[] = json?.data?.records || [];
   if (users.length === 0) return { userId: "-1", avatarUrl: "", username: "" };
@@ -83,7 +74,7 @@ async function getUserInfo(username: string) {
       return { userId: "-2", avatarUrl: "", username: "" };
     }
     const tmp = await res.json();
-    console.log(tmp);
+    // console.log(tmp);
     const newUsers: any[] = tmp?.data?.records || [];
     users.push(...newUsers);
   }
@@ -153,6 +144,134 @@ async function renderHTML(html: string) {
   });
   await browser.close();
   return h.image(imageBuffer, "image/png");
+}
+
+interface ContestInfo {
+  id: string;
+  name: string;
+  logo: string;
+  contestTime: string;
+  countdown: string;
+}
+
+async function getContestList(): Promise<ContestInfo[]> {
+  const contests: ContestInfo[] = [];
+  const url = "https://ac.nowcoder.com/acm/contest/vip-index";
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+          "AppleWebKit/537.36 (KHTML, like Gecko) " +
+          "Chrome/114.0.0.0 Safari/537.36",
+      },
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    const html = await res.text();
+
+    //所有的比赛div块
+    const allContestDivs = [];
+    const divPattern =
+      /<div[^>]*data-id="(\d+)"[^>]*class="platform-item js-item[^"]*"[^>]*([\s\S]*?)(?=<div[^>]*data-id="|<\/div>\s*<\/div>|$)/g;
+    let match;
+    while ((match = divPattern.exec(html)) !== null) {
+      allContestDivs.push({
+        id: match[1],
+        content: match[0],
+      });
+    }
+    for (const contestDiv of allContestDivs) {
+      const contestId = contestDiv.id;
+      const contestHtml = contestDiv.content;
+      try {
+        const decodedHtml = contestHtml
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+
+        const nameMatch = decodedHtml.match(
+          /<a[^>]*href="\/acm\/contest\/\d+"[^>]*target="_blank"[^>]*>([^<]+)<\/a>/
+        );
+        const name = nameMatch ? nameMatch[1].trim() : "";
+        // console.log(`比赛名称: ${name}`);
+
+        // logo
+        const logoMatch = decodedHtml.match(/<img[^>]*src="([^"]+)"/);
+        const logo = logoMatch ? logoMatch[1] : "";
+
+        // 比赛时间
+        const timeMatch = decodedHtml.match(/比赛时间：([^<]+)/);
+        const contestTime = timeMatch
+          ? timeMatch[1].trim().replace(/\s+/g, " ")
+          : "";
+
+        if (name) {
+          // 解析比赛开始时间
+          let isUpcoming = true;
+
+          const startTimeMatch = contestTime.match(
+            /(\d{4}-\d{2}-\d{2} \d{2}:\d{2})/
+          );
+
+          if (startTimeMatch) {
+            const contestStartTimeStr = startTimeMatch[1];
+            const contestStartTime = new Date(contestStartTimeStr);
+            const now = new Date();
+            isUpcoming = contestStartTime > now;
+          } else {
+            isUpcoming = true;
+          }
+
+          // 计算倒计时
+          let countdown = "";
+          if (startTimeMatch) {
+            const contestStartTimeStr = startTimeMatch[1];
+            const contestStartTime = new Date(contestStartTimeStr);
+            const now = new Date();
+            const timeDiff = contestStartTime.getTime() - now.getTime();
+
+            if (timeDiff > 0) {
+              const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+              const hours = Math.floor(
+                (timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+              );
+              const minutes = Math.floor(
+                (timeDiff % (1000 * 60 * 60)) / (1000 * 60)
+              );
+              const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+
+              countdown = `${days}天${hours}小时${minutes}分${seconds}秒`;
+            }
+          }
+
+          if (isUpcoming) {
+            contests.push({
+              id: contestId,
+              name,
+              logo,
+              contestTime,
+              countdown,
+            });
+          }
+        } else {
+        }
+      } catch (parseError) {
+        console.error(`解析比赛ID ${contestId} 失败:`, parseError);
+        return [];
+      }
+    }
+    return contests;
+  } catch (error) {
+    console.error("获取比赛列表失败:", error);
+    return [];
+  }
 }
 
 function scoreColor(score: number) {
@@ -306,14 +425,42 @@ export function apply(ctx: Context) {
       });
     });
   });
+
+  ctx.command("牛客比赛").action(async ({ session }) => {
+    getContestList().then(async (contests) => {
+      if (contests.length === 0) {
+        session.send("获取比赛失败");
+        return;
+      }
+      let message = `共 ${contests.length} 个即将开始的比赛：\n\n\n`;
+
+      for (let i = 0; i < contests.length; i++) {
+        const contest = contests[i];
+
+        const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
+          contest.logo
+        )}&w=50&h=50&fit=cover`;
+        message += `${i + 1}.\n`;
+        message += segment.image(proxyUrl) + "\n";
+
+        message += `${contest.name}\n`;
+
+        message += `开赛时间：${contest.contestTime.split("至")[0]}\n`;
+        if (contest.countdown) {
+          message += `距离开赛：${contest.countdown}\n`;
+        }
+        message += `比赛链接：https://ac.nowcoder.com/acm/contest/${contest.id}\n\n\n`;
+      }
+      session.send(message);
+    });
+  });
+
   // ctx.command("test").action(async ({ session }) => {
-  //   const html = `
-  //   <html>
-  //     <body style="background: #ffffff; font-size: 20px;">
-  //       <h1>114</h1>
-  //     </body>
-  //   </html>`;
-  //   const image = await renderHTML(html);
-  //   session.send(image);
+  //     const url =
+  //       "https://uploadfiles.nowcoder.com/images/20250417/999991351_1744869903446/CE08429E50663699CB0A5F745237B613";
+  //     const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
+  //       url
+  //     )}&w=100&h=100&fit=cover`;
+  //     session.send(["111", segment.image(proxyUrl), "111"]);
   // });
 }

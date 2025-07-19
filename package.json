@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-niuke-data",
-  "description": "获取牛客竞赛最后一场比赛rating变化",
-  "version": "0.1.0",
+  "description": "获取牛客竞赛站的一些数据",
+  "version": "0.2.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -16,7 +16,14 @@
   "keywords": [
     "chatbot",
     "koishi",
-    "plugin"
+    "plugin",
+    "niuke",
+    "nowcoder",
+    "acm",
+    "牛客",
+    "rating",
+    "竞赛",
+    "牛客竞赛"
   ],
   "peerDependencies": {
     "koishi": "^4.18.7"
