@@ -2,10 +2,51 @@
 import { Context, Schema, h } from "koishi";
 import puppeteer from "puppeteer";
 export const name = "niuke-data";
+import {} from "koishi-plugin-cron";
+export const inject = {
+  required: ["puppeteer", "cron", "database"],
+  optional: [],
+};
 
-export interface Config {}
+export const usage = `
+## 定期推送
+插件将会在每周五和周日的18:45爬取牛客比赛信息；\n\n若当天有 周赛 / 月赛 / 练习赛 / 挑战赛，将会根据下方对应配置推送到群中\n\n
+## 指令说明
+- \`nkc [num]\` 获取牛客即将进行的比赛，参数为所展示的数量，可选，默认为全部
+- \`nkr <user_name>\` 获取牛客最后一场比赛的Rating变化，参数为用户名，支持模糊查询
+`;
 
-export const Config: Schema<Config> = Schema.object({});
+export interface Config {
+  推送设置: {
+    groupId: string; // 群号
+    weekly: boolean; // 周赛推送
+    monthly: boolean; // 月赛推送
+    training: boolean; // 练习赛推送
+    challenge: boolean; // 挑战赛推送
+  }[];
+}
+
+export const Config: Schema<Config> = Schema.object({
+  推送设置: Schema.array(
+    Schema.object({
+      groupId: Schema.string().description("群号").required(true),
+      weekly: Schema.boolean().default(true).description("周赛推送"),
+      monthly: Schema.boolean().default(true).description("月赛推送"),
+      training: Schema.boolean().default(true).description("练习赛推送"),
+      challenge: Schema.boolean().default(false).description("挑战赛推送"),
+    })
+  )
+    .role("table")
+    .default([
+      {
+        groupId: "example",
+        weekly: true,
+        monthly: false,
+        training: true,
+        challenge: true,
+      },
+    ]),
+});
 
 async function getUserInfo(username: string) {
   const ts = Date.now();
@@ -283,28 +324,31 @@ function scoreColor(score: number) {
   if (score < 2800) return "#ff8800";
   return "#ff020a";
 }
-export function apply(ctx: Context) {
-  ctx.command("nk <arg1>").action(async ({ session }, name) => {
-    getUserInfo(name).then((result) => {
-      // console.log(result);
-      if (result.userId === "-1") {
-        session.send("未找到用户");
-        return;
-      } else if (result.userId === "-2") {
-        session.send("获取用户信息失败");
-        return;
-      }
-      const resname = result.username;
-      getHistory(result.userId).then(async (data) => {
-        if (typeof data === "string") {
-          session.send(data);
+export function apply(ctx: Context, cfg: Config) {
+  ctx
+    .command("nkr <user_name>", "获取牛客最后一场比赛的Rating变化")
+    .usage("参数为用户名，支持模糊查询")
+    .action(async ({ session }, name) => {
+      getUserInfo(name).then((result) => {
+        // console.log(result);
+        if (result.userId === "-1") {
+          session.send("未找到用户");
+          return;
+        } else if (result.userId === "-2") {
+          session.send("获取用户信息失败");
           return;
         }
-        const { rating, contestname, rank, change } = data;
-        if (contestname === "") {
-          session.send(`用户"${resname}"暂无比赛记录`);
-        } else {
-          const html = `
+        const resname = result.username;
+        getHistory(result.userId).then(async (data) => {
+          if (typeof data === "string") {
+            session.send(data);
+            return;
+          }
+          const { rating, contestname, rank, change } = data;
+          if (contestname === "") {
+            session.send(`用户"${resname}"暂无比赛记录`);
+          } else {
+            const html = `
             <html>
               <head>
                 <style>
@@ -419,61 +463,111 @@ export function apply(ctx: Context) {
               </body>
             </html>
           `;
-          const image = await renderHTML(html);
-          session.send(image);
-        }
+            const image = await renderHTML(html);
+            session.send(image);
+          }
+        });
       });
     });
-  });
 
-  ctx.command("牛客比赛 [arg1]").action(async ({ session }, num) => {
-    getContestList().then(async (contests) => {
-      if (contests.length === 0) {
-        session.send("获取比赛失败");
-        return;
-      }
-      let message = ``;
-      let len = 0;
-      if (num === "0" || num === undefined || num === "") {
-        message = `共 ${contests.length} 个即将开始的比赛：\n\n`;
-        len = contests.length;
-      } else if (num && !isNaN(Number(num))) {
-        len = Number(num);
-        if (len > contests.length) {
+  ctx
+    .command("nkc [num]", "获取牛客即将进行的比赛")
+    .usage("参数为所展示的数量，可选")
+    .action(async ({ session }, num) => {
+      getContestList().then(async (contests) => {
+        if (contests.length === 0) {
+          session.send("获取比赛失败");
+          return;
+        }
+        let message = ``;
+        let len = 0;
+        if (num === "0" || num === undefined || num === "") {
+          console.log(num);
+          message = `共 ${contests.length} 个即将开始的比赛：\n\n`;
           len = contests.length;
+        } else if (num && !isNaN(Number(num))) {
+          len = Number(num);
+          if (len > contests.length) {
+            len = contests.length;
+          }
+          message = `共 ${contests.length} 个即将开始的比赛，前 ${len} 场：\n\n`;
+        } else {
+          session.send("请输入正确的数字");
+          return;
         }
-        message = `共 ${contests.length} 个即将开始的比赛，前 ${len} 场：\n\n`;
-      } else {
-        session.send("请输入正确的数字");
-        return;
-      }
-      for (let i = 0; i < len; i++) {
-        const contest = contests[i];
+        for (let i = 0; i < len; i++) {
+          const contest = contests[i];
 
-        // const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
-        //   contest.logo
-        // )}&w=50&h=50&fit=cover`;
-        message += `(${i + 1})\n`;
-        // message += segment.image(proxyUrl) + "\n";
+          // const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
+          //   contest.logo
+          // )}&w=50&h=50&fit=cover`;
+          message += `(${i + 1})\n`;
+          // message += segment.image(proxyUrl) + "\n";
 
-        message += `${contest.name}\n`;
+          message += `${contest.name}\n`;
 
-        message += `开赛时间：${contest.contestTime.split("至")[0]}\n`;
-        if (contest.countdown) {
-          message += `距离开赛：${contest.countdown}\n`;
+          message += `开赛时间：${contest.contestTime.split("至")[0]}\n`;
+          if (contest.countdown) {
+            message += `距离开赛：${contest.countdown}\n`;
+          }
+          message += `比赛链接：https://ac.nowcoder.com/acm/contest/${contest.id}\n\n`;
         }
-        message += `比赛链接：https://ac.nowcoder.com/acm/contest/${contest.id}\n\n`;
+        session.send(message);
+      });
+    });
+
+  ctx.cron("45 18 * * 5,0", async () => {
+    getContestList().then(async (contests) => {
+      const contest = contests[0];
+      //检验最近的比赛是否在今天
+      if (contest) {
+        const contestTime = new Date(contest.contestTime.split("至")[0]);
+        // const contestTime = new Date("2025-07-19  19:00:00   ");
+
+        const now = new Date();
+        if (
+          contestTime.getDate() === now.getDate() &&
+          contestTime.getMonth() === now.getMonth() &&
+          contestTime.getFullYear() === now.getFullYear()
+        ) {
+          console.log("今天有比赛");
+          let broadcastID = [];
+          for (const group of cfg.推送设置) {
+            if (!group.groupId || group.groupId === "example") continue;
+            if (name.includes("周赛") && group.weekly) {
+              const groupId = `onebot:${group.groupId}`;
+              broadcastID.push(groupId);
+            } else if (name.includes("月赛") && group.monthly) {
+              const groupId = `onebot:${group.groupId}`;
+              broadcastID.push(groupId);
+            } else if (name.includes("练习赛") && group.training) {
+              const groupId = `onebot:${group.groupId}`;
+              broadcastID.push(groupId);
+            } else if (name.includes("挑战赛") && group.challenge) {
+              const groupId = `onebot:${group.groupId}`;
+              broadcastID.push(groupId);
+            }
+          }
+          const message = `今晚有${contest.name}\n比赛链接：https://ac.nowcoder.com/acm/contest/${contest.id}`;
+          // console.log(message);
+          if (broadcastID.length != 0) {
+            ctx.broadcast(broadcastID, message);
+          }
+        } else {
+          console.log("今天没有比赛");
+          return;
+        }
       }
-      session.send(message);
     });
   });
-
-  // ctx.command("test").action(async ({ session }) => {
-  //     const url =
-  //       "https://uploadfiles.nowcoder.com/images/20250417/999991351_1744869903446/CE08429E50663699CB0A5F745237B613";
-  //     const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
-  //       url
-  //     )}&w=100&h=100&fit=cover`;
-  //     session.send(["111", segment.image(proxyUrl), "111"]);
+  // ctx.command("广播测试,不要使用").action(async ({ session }) => {
+  //   const message = `测试消息`;
+  //   let broadcastID = [];
+  //   for (const group of cfg.推送设置) {
+  //     const groupId = `onebot:${group.groupId}`;
+  //     broadcastID.push(groupId);
+  //   }
+  //   ctx.broadcast(broadcastID, message);
+  //   session.send("测试消息已发送到群组");
   // });
 }

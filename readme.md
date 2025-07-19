@@ -2,12 +2,16 @@
 
 [![npm](https://img.shields.io/npm/v/koishi-plugin-niuke-data?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-niuke-data)
 
-- 获取牛客竞赛某用户的最后一场比赛rating变化：
+## 定期推送
 
-  - 指令为 nk + <user_name>
+插件将会在每周五和周日的18:45爬取牛客比赛信息；
 
-- 获取牛客近期即将开始的比赛
+若当天有 周赛 / 月赛 / 练习赛 / 挑战赛，将会根据对应配置推送到群中
 
-  - 指令为 牛客比赛 + [显示比赛数量] (为空则全部展示)
+## 指令说明
+
+- `nkc [num]` 获取牛客即将进行的比赛，参数为所展示的数量，可选，默认为全部
+
+- `nkr <user_name>` 获取牛客最后一场比赛的Rating变化，参数为用户名，支持模糊查询
 
 

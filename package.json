@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-niuke-data",
-  "description": "获取牛客竞赛站的一些数据",
-  "version": "0.2.3",
+  "description": "可获取牛客网最后一场比赛的Rating变化，可列出即将进行的比赛，并可以在开始前15分钟发推送消息",
+  "version": "1.0.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -28,7 +28,8 @@
     "牛客",
     "rating",
     "竞赛",
-    "牛客竞赛"
+    "牛客竞赛",
+    "推送"
   ],
   "peerDependencies": {
     "koishi": "^4.18.7"
