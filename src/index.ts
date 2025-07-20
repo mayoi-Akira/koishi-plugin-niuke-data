@@ -10,12 +10,22 @@ export const inject = {
 
 export const usage = `
 ## 定期推送
-插件将会在每周五和周日的18:45爬取牛客比赛信息；\n\n若当天有 周赛 / 月赛 / 练习赛 / 挑战赛，将会根据下方对应配置推送到群中\n\n
+插件将会在每周五和周日的18:45爬取牛客比赛信息；\n\n若当天有 周赛 / 月赛 / 练习赛 / 挑战赛，将会根据下方对应配置推送到群中\n\n<br>\n\n
 ## 指令说明
-- \`nkc [num]\` 获取牛客即将进行的比赛，参数为所展示的数量，可选，默认为全部
-- \`nkr <user_name>\` 获取牛客最后一场比赛的Rating变化，参数为用户名，支持模糊查询
-- \`nkrank  -k [key] -s [size] -p [page]\` 获取牛客排行榜，参数为每页数量、搜索关键字和页码，均为可选
-`;
+1. \`nkc [num]\` 获取牛客即将进行的比赛，参数为所展示的数量，可选，默认为全部
+    - 例如：\`nkc 5\` 获取即将开始的前5场比赛
+2. \`nkr <user_name>\` 获取牛客最后一场比赛的Rating变化，参数为用户名，支持模糊查询
+    - 例如：\`nkr 青木阳菜\` 获取用户\`青木阳菜\`的最后一场比赛的Rating变化
+3. \`nkrank \` 获取牛客排行榜
+
+    - 可用选项如下（全部可为空，若为空则使用默认值）:\n
+      (1) \` -s, --size [size]\`  每页的展示数量\n
+      (2) \` -k, --key [key]\`    搜索关键字\n
+      (3) \`-p, --page [page]\`  页码\n
+      (4)  \`-a, --all\` 获取总榜，若使用key参数会自动失效\n
+    - 例如：\`nkrank -k 大连民族大学 -s 10 -p 1\` 展示大连民族大学搜索结果的第1页的前10个人\n
+<br>
+    `;
 
 export interface Config {
   排行榜查询默认参数: {
@@ -697,7 +707,7 @@ export function apply(ctx: Context, cfg: Config) {
       const all = options.all || false;
       const pageSize = options.size || cfg.排行榜查询默认参数.每页数量;
       let searchKey = options.key || cfg.排行榜查询默认参数.搜索词;
-      const page = options.page || cfg.排行榜查询默认参数.页数;
+      let page = options.page || cfg.排行榜查询默认参数.页数;
       if (all) searchKey = "";
       if (pageSize <= 0 || pageSize > 50) {
         session.send("每页数量必须在1到50之间");
@@ -737,18 +747,19 @@ export function apply(ctx: Context, cfg: Config) {
           count = Number(countMatch[1]);
           console.log(count);
         }
-        if (count === 0) {
-          session.send("未找到排行榜数据，请确认搜索词是否正确");
-          return;
-        }
-        if (page > Math.ceil(count / pageSize)) {
-          session.sendQueued("诶？好像没有那么多人呢");
-          session.sendQueued(
-            `总人数为 ${count}，展示数量为 ${pageSize} 的话，最多只能到第 ${Math.ceil(
-              count / pageSize
-            )} 页哦`
-          );
-          return;
+        if (!count && page != 1) {
+          session.sendQueued(`诶？搜索结果貌似只有一页呢，那就仅展示第一页吧`);
+          page = 1;
+        } else {
+          if (page > Math.ceil(count / pageSize)) {
+            session.sendQueued("诶？好像没有那么多人呢");
+            session.sendQueued(
+              `总人数为 ${count}，展示数量为 ${pageSize} 的话，最多只能到第 ${Math.ceil(
+                count / pageSize
+              )} 页哦`
+            );
+            return;
+          }
         }
         // 解析HTML，提取用户信息
         const users = [];

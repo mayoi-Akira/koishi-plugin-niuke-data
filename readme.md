@@ -15,8 +15,13 @@
 - `nkr <user_name>` 获取牛客最后一场比赛的Rating变化，参数为用户名，支持模糊查询
 
 - `nkrank ` 获取牛客排行榜
-   - 可用的选项有：
-   ` -s, --size [size]`  每页的展示数量
-   ` -k, --key [key]`    搜索关键字
-    `-p, --page [page]`  页码
 
+  1. ` -s, --size [size]`  每页的展示数量
+
+  1. ` -k, --key [key]`    搜索关键字
+
+  1. `-p, --page [page]`  页码
+
+  1.  `-a, --all` 获取总榜，若使用key参数会自动失效
+
+  - 例如：`nkrank -k 大连民族大学 -s 10 -p 1`
