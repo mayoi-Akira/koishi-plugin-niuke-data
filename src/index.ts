@@ -680,7 +680,7 @@ export function apply(ctx: Context, cfg: Config) {
 
   ctx
     .command("nkrank", "获取牛客排行榜")
-    .option("size", "-s [size] 每页的展示数量", {
+    .option("size", "-s [size] 每页的展示数量(1 - 50)", {
       fallback: cfg.排行榜查询默认参数.每页数量,
     })
     .option("key", "-k [key] 搜索关键字", {
@@ -689,11 +689,16 @@ export function apply(ctx: Context, cfg: Config) {
     .option("page", "-p [page] 页码", {
       fallback: cfg.排行榜查询默认参数.页数,
     })
+    .option("all", "-a 获取总榜，使用这个的话key参数会失效", {
+      fallback: false,
+    })
     .action(async ({ options, session }) => {
       console.log(options);
+      const all = options.all || false;
       const pageSize = options.size || cfg.排行榜查询默认参数.每页数量;
-      const searchKey = options.key || cfg.排行榜查询默认参数.搜索词;
+      let searchKey = options.key || cfg.排行榜查询默认参数.搜索词;
       const page = options.page || cfg.排行榜查询默认参数.页数;
+      if (all) searchKey = "";
       if (pageSize <= 0 || pageSize > 50) {
         session.send("每页数量必须在1到50之间");
         return;
@@ -737,8 +742,8 @@ export function apply(ctx: Context, cfg: Config) {
           return;
         }
         if (page > Math.ceil(count / pageSize)) {
-          session.send("诶？好像没有那么多人呢");
-          session.send(
+          session.sendQueued("诶？好像没有那么多人呢");
+          session.sendQueued(
             `总人数为 ${count}，展示数量为 ${pageSize} 的话，最多只能到第 ${Math.ceil(
               count / pageSize
             )} 页哦`
@@ -785,7 +790,7 @@ export function apply(ctx: Context, cfg: Config) {
         }
 
         if (users.length === 0) {
-          session.send("未找到排行榜数据");
+          session.send("未找到排行榜数据，请确认搜索词是否正确");
           return;
         }
 
