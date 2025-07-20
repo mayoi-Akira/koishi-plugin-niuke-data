@@ -10,7 +10,7 @@ export const inject = {
 
 export const usage = `
 ## 定期推送
-插件将会在每周五和周日的18:45爬取牛客比赛信息；\n\n若当天有 周赛 / 月赛 / 练习赛 / 挑战赛，将会根据下方对应配置推送到群中\n\n<br>\n\n
+插件可以每天定时爬取牛客比赛信息；\n\n若当天有 周赛 / 月赛 / 练习赛 / 挑战赛，将会根据下方对应配置推送到群中\n\n<br>\n\n
 ## 指令说明
 1. \`nkc [num]\` 获取牛客即将进行的比赛，参数为所展示的数量，可选，默认为全部
     - 例如：\`nkc 5\` 获取即将开始的前5场比赛
@@ -28,31 +28,51 @@ export const usage = `
     `;
 
 export interface Config {
-  排行榜查询默认参数: {
-    每页数量: number; // 每页数量
-    搜索词: string; // 搜索关键字
-    页数: number; // 页码
+  rankingQuery: {
+    pageSize: number; // 每页展示数量
+    searchKey: string; // 搜索关键字
+    page: number; // 页码
   };
-  推送设置: {
+  pushCofig: {
     groupId: string; // 群号
     weekly: boolean; // 周赛推送
     monthly: boolean; // 月赛推送
     training: boolean; // 练习赛推送
     challenge: boolean; // 挑战赛推送
   }[];
+  pushMessage: { pushTime: string; sendUrl: boolean; message: string[] };
 }
 
 export const Config: Schema<Config> = Schema.object({
-  排行榜查询默认参数: Schema.object({
-    每页数量: Schema.number()
+  rankingQuery: Schema.object({
+    pageSize: Schema.number()
       .min(1)
       .max(50)
       .default(20)
       .description("每页展示数量"),
-    搜索词: Schema.string().default("").description("搜索关键字"),
-    页数: Schema.number().min(1).default(1).description("显示第几页"),
-  }).role("table"),
-  推送设置: Schema.array(
+    searchKey: Schema.string().default("").description("搜索关键字"),
+    page: Schema.number().min(1).default(1).description("显示第几页"),
+  })
+    .role("table")
+    .description("排行榜查询默认值配置"),
+
+  pushMessage: Schema.object({
+    pushTime: Schema.string()
+      .default("18:45")
+      .description(
+        "牛客系列赛的推送时间，格式为hh:mm(半角冒号)，仅能设置在19点之前"
+      )
+      .pattern(/^(0?[0-9]|1[0-8]):(0?[0-9]|[1-5][0-9])$/),
+    message: Schema.array(String)
+      .role("table")
+      .default(["别忘了今天有比赛哦~"])
+      .description("推送消息内容，若要空行，设置为空格即可"),
+    sendUrl: Schema.boolean()
+      .default(true)
+      .description("是否发送比赛链接，若选中则在消息最后加上比赛链接"),
+  }).description("推送消息配置"),
+
+  pushCofig: Schema.array(
     Schema.object({
       groupId: Schema.string().description("群号").required(true),
       weekly: Schema.boolean().default(true).description("周赛推送"),
@@ -70,7 +90,8 @@ export const Config: Schema<Config> = Schema.object({
         training: true,
         challenge: true,
       },
-    ]),
+    ])
+    .description("推送配置"),
 });
 
 async function getUserInfo(username: string) {
@@ -475,6 +496,12 @@ async function getContestList(): Promise<ContestInfo[]> {
   }
 }
 
+function getPushTime(cfg: Config) {
+  const [hour, minute] = cfg.pushMessage.pushTime.split(":");
+  const res = `${minute} ${hour} * * *`;
+  return res;
+}
+
 function scoreColor(score: number) {
   if (score < 700) return "#b4b4b4";
   if (score < 1100) return "#c177e7";
@@ -691,13 +718,13 @@ export function apply(ctx: Context, cfg: Config) {
   ctx
     .command("nkrank", "获取牛客排行榜")
     .option("size", "-s [size] 每页的展示数量(1 - 50)", {
-      fallback: cfg.排行榜查询默认参数.每页数量,
+      fallback: cfg.rankingQuery.pageSize,
     })
     .option("key", "-k [key] 搜索关键字", {
-      fallback: cfg.排行榜查询默认参数.搜索词,
+      fallback: cfg.rankingQuery.searchKey,
     })
     .option("page", "-p [page] 页码", {
-      fallback: cfg.排行榜查询默认参数.页数,
+      fallback: cfg.rankingQuery.page,
     })
     .option("all", "-a 获取总榜，使用这个的话key参数会失效", {
       fallback: false,
@@ -705,12 +732,12 @@ export function apply(ctx: Context, cfg: Config) {
     .action(async ({ options, session }) => {
       console.log(options);
       const all = options.all || false;
-      const pageSize = options.size || cfg.排行榜查询默认参数.每页数量;
-      let searchKey = options.key || cfg.排行榜查询默认参数.搜索词;
-      let page = options.page || cfg.排行榜查询默认参数.页数;
+      const pageSize = options.size || cfg.rankingQuery.pageSize;
+      let searchKey = options.key || cfg.rankingQuery.searchKey;
+      let page = options.page || cfg.rankingQuery.page;
       if (all) searchKey = "";
       if (pageSize <= 0 || pageSize > 50) {
-        session.send("每页数量必须在1到50之间");
+        session.send("pageSize必须在1到50之间");
         return;
       }
       if (page <= 0) {
@@ -718,10 +745,12 @@ export function apply(ctx: Context, cfg: Config) {
         return;
       }
       if (searchKey.length > 20) {
-        session.send("搜索词过长，不得超过20");
+        session.send("searchKey过长，不得超过20");
         return;
       }
-      console.log(`搜索词: ${searchKey}, 每页数量: ${pageSize}, 页码: ${page}`);
+      console.log(
+        `searchKey: ${searchKey}, pageSize: ${pageSize}, 页码: ${page}`
+      );
       // console.log("1");
       const url = `https://ac.nowcoder.com/acm/contest/rating-index?searchUserName=${encodeURIComponent(
         searchKey
@@ -801,7 +830,7 @@ export function apply(ctx: Context, cfg: Config) {
         }
 
         if (users.length === 0) {
-          session.send("未找到排行榜数据，请确认搜索词是否正确");
+          session.send("未找到排行榜数据，请确认searchKey是否正确");
           return;
         }
         console.log("users:", users);
@@ -815,7 +844,7 @@ export function apply(ctx: Context, cfg: Config) {
       }
     });
 
-  ctx.cron("45 18 * * 5,0", async () => {
+  ctx.cron(getPushTime(cfg), async () => {
     getContestList().then(async (contests) => {
       const contest = contests[0];
       //检验最近的比赛是否在今天
@@ -829,9 +858,9 @@ export function apply(ctx: Context, cfg: Config) {
           contestTime.getMonth() === now.getMonth() &&
           contestTime.getFullYear() === now.getFullYear()
         ) {
-          console.log("今天有比赛");
+          console.log("今天有比赛\n\n");
           let broadcastID = [];
-          for (const group of cfg.推送设置) {
+          for (const group of cfg.pushCofig) {
             if (!group.groupId || group.groupId === "example") continue;
             if (contest.name.includes("周赛") && group.weekly) {
               const groupId = `onebot:${group.groupId}`;
@@ -847,8 +876,15 @@ export function apply(ctx: Context, cfg: Config) {
               broadcastID.push(groupId);
             }
           }
-          const message = `今晚有${contest.name}\n比赛链接：https://ac.nowcoder.com/acm/contest/${contest.id}`;
-          // console.log(message);
+          const sendUrl = `${contest.name} 链接：\nhttps://ac.nowcoder.com/acm/contest/${contest.id}`;
+          let message = "";
+          for (const msg of cfg.pushMessage.message) {
+            message += msg + "\n";
+          }
+          if (cfg.pushMessage.sendUrl) {
+            message += sendUrl;
+          }
+          console.log(message);
           if (broadcastID.length != 0) {
             ctx.broadcast(broadcastID, message);
           }
@@ -863,7 +899,7 @@ export function apply(ctx: Context, cfg: Config) {
   // ctx.command("广播测试,不要使用").action(async ({ session }) => {
   //   const message = `测试消息`;
   //   let broadcastID = [];
-  //   for (const group of cfg.推送设置) {
+  //   for (const group of cfg.pushCofig) {
   //     const groupId = `onebot:${group.groupId}`;
   //     broadcastID.push(groupId);
   //   }

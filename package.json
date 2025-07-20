@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-niuke-data",
-  "description": "可获取牛客末场比赛的Rating变化，可列出即将进行的比赛，可在开始前15分钟发推送消息，可以按要求查询排行榜",
-  "version": "1.1.2",
+  "description": "可获取牛客末场比赛的Rating变化，可列出即将进行的比赛，可在比赛开始前发推送消息，可以按要求查询排行榜",
+  "version": "1.2.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
