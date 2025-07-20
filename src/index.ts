@@ -22,7 +22,7 @@ export const usage = `
       (1) \` -s, --size [size]\`  每页的展示数量\n
       (2) \` -k, --key [key]\`    搜索关键字\n
       (3) \`-p, --page [page]\`  页码\n
-      (4)  \`-a, --all\` 获取总榜，若使用key参数会自动失效\n
+      (4)  \`-a, --all\` 获取总榜，若使用这个，key参数会自动失效\n
     - 例如：\`nkrank -k 大连民族大学 -s 10 -p 1\` 展示大连民族大学搜索结果的第1页的前10个人\n
 <br>
     `;
@@ -227,7 +227,7 @@ async function renderRatingHTML(html: string) {
 
 async function renderRankingHTML(
   users: any[],
-  searchKey: string,
+  pageSize: number,
   pageNum: number
 ) {
   const itemHeight = 60; // 每个用户项的高度
@@ -298,7 +298,7 @@ async function renderRankingHTML(
         <div class="ranking-list">
           ${users
             .map((user, index) => {
-              const rank = (pageNum - 1) * users.length + index + 1;
+              const rank = (pageNum - 1) * pageSize + index + 1;
               return `
               <div class="ranking-item">
                 <div class="rank-number">#${rank}</div>
@@ -721,7 +721,7 @@ export function apply(ctx: Context, cfg: Config) {
         session.send("搜索词过长，不得超过20");
         return;
       }
-      console.log(pageSize, searchKey, page);
+      console.log(`搜索词: ${searchKey}, 每页数量: ${pageSize}, 页码: ${page}`);
       // console.log("1");
       const url = `https://ac.nowcoder.com/acm/contest/rating-index?searchUserName=${encodeURIComponent(
         searchKey
@@ -745,7 +745,7 @@ export function apply(ctx: Context, cfg: Config) {
         let count;
         if (countMatch) {
           count = Number(countMatch[1]);
-          console.log(count);
+          console.log(`搜索结果数量：${count || "空"}`);
         }
         if (!count && page != 1) {
           session.sendQueued(`诶？搜索结果貌似只有一页呢，那就仅展示第一页吧`);
@@ -804,9 +804,9 @@ export function apply(ctx: Context, cfg: Config) {
           session.send("未找到排行榜数据，请确认搜索词是否正确");
           return;
         }
-
+        console.log("users:", users);
         // 渲染排行榜图片并发送
-        const rankingImage = await renderRankingHTML(users, searchKey, page);
+        const rankingImage = await renderRankingHTML(users, pageSize, page);
         session.send(rankingImage);
       } catch (err) {
         console.error("获取排行榜失败:", err);
