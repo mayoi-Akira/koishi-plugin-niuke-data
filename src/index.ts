@@ -65,7 +65,7 @@ export const Config: Schema<Config> = Schema.object({
       .pattern(/^(0?[0-9]|1[0-8]):(0?[0-9]|[1-5][0-9])$/),
     message: Schema.array(String)
       .role("table")
-      .default(["别忘了今天有比赛哦~"])
+      .default(["别忘了今天有比赛哦~", " "])
       .description("推送消息内容，若要空行，设置为空格即可"),
     sendUrl: Schema.boolean()
       .default(true)
@@ -516,12 +516,12 @@ export function apply(ctx: Context, cfg: Config) {
     .command("nkr <user_name>", "获取牛客最后一场比赛的Rating变化")
     .usage("参数为用户名，支持模糊查询")
     .action(async ({ session }, name) => {
-      if (name.length > 20) {
-        session.send("输入用户名过长");
+      if (!name || name.length === 0) {
+        session.send("请输入用户名");
         return;
       }
-      if (name.length === 0) {
-        session.send("请输入用户名");
+      if (name.length > 20) {
+        session.send("输入用户名过长");
         return;
       }
       getUserInfo(name).then((result) => {
@@ -629,7 +629,7 @@ export function apply(ctx: Context, cfg: Config) {
                     }
                     <div class="username">${resname}</div>
                   </div>
-                  <div class="contest">${contestname}</div>
+                  <div class="contest"><strong>${contestname}</strong></div>
                   <div class="stats">
                     <div class="stat-item">
                       <div class="stat-label">排名</div>
@@ -689,7 +689,10 @@ export function apply(ctx: Context, cfg: Config) {
             session.send("请输入正确的数字");
             return;
           }
-          message = `共 ${contests.length} 个即将开始的比赛，前 ${len} 场：\n\n`;
+          message = `共 ${contests.length} 个即将开始的比赛；`;
+          console.log(len);
+          if (len === 1) message += `第1场:\n\n`;
+          else message += `前${len}场:\n\n`;
         } else {
           session.send("请输入正确的数字");
           return;
@@ -697,12 +700,12 @@ export function apply(ctx: Context, cfg: Config) {
         for (let i = 0; i < len; i++) {
           const contest = contests[i];
 
-          // const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
-          //   contest.logo
-          // )}&w=50&h=50&fit=cover`;
-          message += `(${i + 1})\n`;
-          // message += segment.image(proxyUrl) + "\n";
-
+          const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(
+            contest.logo
+          )}&w=125&h=125&fit=cover`;
+          if (len != 1) message += `${i + 1}.`;
+          message += "\n";
+          message += `<img src="${proxyUrl}" />\n`;
           message += `${contest.name}\n`;
 
           message += `开赛时间：${contest.contestTime.split("至")[0]}\n`;
@@ -906,4 +909,10 @@ export function apply(ctx: Context, cfg: Config) {
   //   ctx.broadcast(broadcastID, message);
   //   session.send("测试消息已发送到群组");
   // });
+
+  ctx.command("test").action(async ({ session }) => {
+    // session.sendQueued("");
+    session.send('1234<img src="https://koishi.chat/logo.png">1234');
+    // session.sendQueued("2");
+  });
 }
